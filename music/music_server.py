@@ -8,7 +8,15 @@ import dicfile
 
 stationConnectionList = []
 stationConnection = []
+stationArgument = ""
+skippingstation = []
+activeStation = []
+exitFlags = []
 
+
+#  **************************************************************************************************************************************************
+#  *************************************************station code*************************************************************************************
+#  **************************************************************************************************************************************************
 
 def station(station_id, music_list):
     track_num = 0
@@ -22,11 +30,11 @@ def station(station_id, music_list):
             f = open(music_list[track_num], 'rb')  # try to open a file
         except:  # fail to open a file
             if estart == track_num:
-                print("we had a problem opening all the music files, exiting station")
+                print("we had a problem opening all the music files, exiting station " + str(station_id))
                 exit(1)
             if estart == -1:  # if it's the first time in a row that it failed save this position, if we reach this position again it means the entire list is unreadable
                 estart = track_num
-            print("station ", station_id, " couldn't open file number ", track_num, "trying to skip")
+            print("station ", station_id, " couldn't open file ' ", music_list[track_num], " ' trying to skip")
             track_num += 1
             if track_num >= len(music_list):  # if we reached the end of the list
                 track_num = 0
@@ -45,7 +53,7 @@ def station(station_id, music_list):
     buffer = f.read(4)  # reading a frame header
     while buffer != "":
         data = buffer
-        while ptime < 5:  # 5 seconds target
+        while ptime < 1:  # 5 seconds target
             bitr, samplerate = dicfile.headtorate(buffer)  # getting the rates from the header
             sampleamount = dicfile.sample[(buffer[1] & 0b1110) >> 1]  # checking the amount of samples in the frame
             size = int((sampleamount / 8 * 1000 * bitr) / samplerate) + (
@@ -65,23 +73,43 @@ def listening_thread():
     stationConnection.append(con)
     print("accepted a connection from ", addr)
 
+#  **************************************************************************************************************************************************
+#  ******************************************************main****************************************************************************************
+#  **************************************************************************************************************************************************
 
-# *************************************main***********************************
 
-
-songspath = input("welcome to the music server, please enter the path to the songs separated by a coma (,)")
-staitionthreads = threading.Thread(target=station,args=(1, songspath))
-staitionthreads.start()
+global stationArgument
+songspath = input("welcome to the music server, please enter the path to the songs separated by a coma (,)\n")
+stationthreads = threading.Thread(target=station,args=(1, songspath))
+stationthreads.setDaemon(True)
+stationthreads.start()
 navi = threading.Thread(target=listening_thread, args=())
 
 print("welcome to the server menu! please choose an option (or don't and let the music play)\n1. get the number of stations running\n2. add another song to a "
-          "station's list\n3. get the amount of connections a station has\n4. stop a station\n5. stop all stations and finish")
-while staitionthreads.is_alive():
+          "station's list\n3. get the amount of connections a station has\n4. skip a song on a station\n5.stop a station\n6. stop all stations and finish")
+while stationthreads.is_alive():
     rlist, wlist, xlist = select.select([stdin], [], [], 1)
     if len(rlist):
         option = sys.stdin.read()
         print(type(option))
-        if option == 1 or option == "1":
+        if option == "1":
             print("currently it only works with one (1) station, stay tuned for updates though!")
-        elif option == 2 or option == "2":
-            input()
+        elif option == "2":
+            stationArgument = input("please enter the path to the song you'd like to add!\n")
+        elif option == "3":
+            print(len(stationConnection[0]))
+        elif option == "4":
+            print("skipping")
+            skippingstation[0] = 1
+        elif option == "5":
+            while True:
+                option = input("which station would you like to stop? (currently only 0 works)\n")
+                if int(option) > len(activeStation):
+                    print("%d station doesn't exist, please try again" % option)
+                else:
+                    break
+            exitFlags[option] = True
+            option = "5"
+        elif option == "6":
+            print("stopping all stations and shutting down, may take a few seconds..\n")
+            exit(0)
