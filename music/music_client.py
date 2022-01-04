@@ -6,20 +6,38 @@ from time import sleep
 from sys import stdin
 
 musicPipe = ''
+exitFlag = False
+
+new = False
+
+
+def user():
+    global exitFlag
+    while True:
+        userin = input("if you wanna end the program enter exit otherwise just listen\n")
+        if userin.lower() == 'exit':
+            exitFlag = True
+        else:
+            print("invalid input")
 
 
 def musicPlayer(mutex: threading.Lock):
     global musicPipe
-    soundp = subprocess.Popen("ffplay -i pipe:0 -f mp3 -nodisp", stdin=subprocess.PIPE, stderr=subprocess.PIPE)
-
+    global new
+    soundp = subprocess.Popen("ffplay -i pipe:0 -f mp3 -nodisp -loglevel quiet", stdin=subprocess.PIPE)
+    print("starting to play")
     while True:
+        while not new:
+            zero = 0
         mutex.acquire()
         data = musicPipe
+        new = False
         mutex.release()
         soundp.stdin.write(data)
 
 
 # #############################   main    ###############################
+
 soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 while True:
     inp = input("please enter the ip of the server and the port number\n").split()
@@ -32,30 +50,34 @@ while True:
     except socket.error:
         print("couldn't connect to ", ip, " on port number ", port, " please try again")
     else:
+        print("connected!")
         break
 
-data = soc.recv(1024 * 1024)
 mutex = threading.Lock()
-musicPipe = data
-sleep(0.5)
-
-playerThread = threading.Thread(target=musicPlayer(mutex))
+playerThread = threading.Thread(target=musicPlayer, args=(mutex,))
 playerThread.setDaemon(True)
 playerThread.start()
-print("if you want to end the program type exit")
+
+data = soc.recv(1024 * 1024)
+print("got first packet with the size of", len(data))
+musicPipe = data
+# sleep(0.5)
+
+userThread = threading.Thread(target=user)
+userThread.setDaemon(True)
+userThread.start()
 while True:
-    receiveSel, useless1, useless2 = select.select([soc, stdin], [], [], 1)
-    if receiveSel[0]:
+    receiveSel, useless1, useless2 = select.select([soc], [], [], 1.5)
+    if exitFlag:
+        exit(0)
+    if receiveSel:
+        while new:
+            zero = 0
         mutex.acquire()
         data = soc.recv(1024 * 1024)
         musicPipe = data
+        new = True
         mutex.release()
-    elif receiveSel[1]:
-        inp = stdin.read()
-        if inp.lower() == 'exit':
-            exit(0)
-        else:
-            print("error, if you want to end the program type exit")
     else:
         print("1 second time out, exiting")
         exit(1)

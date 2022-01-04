@@ -1,5 +1,7 @@
 import socket
 import threading
+import time
+
 import select
 from sys import exit, stdin
 import dicfile
@@ -7,12 +9,26 @@ import dicfile
 connections = []
 songList = [""]
 skipFlag = False
+exitFlag = False
+
+
+def user():
+    global skipFlag
+    global exitFlag
+    while True:
+        userin = input("if you wanna skip enter skip, if you wanna end the program enter exit otherwise just listen\n")
+        if userin.lower() == 'skip':
+            skipFlag = True
+        elif userin.lower() == 'exit':
+            exitFlag = True
+        else:
+            print("invalid input, if you wanna skip enter skip, if you wanna end the program enter exit otherwise just listen")
 
 
 def listening_thread():
     global connections
     soc = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    soc.bind(("", 69420))
+    soc.bind(("", 42069))
     soc.listen()
     while True:
         con, addr = soc.accept()
@@ -45,10 +61,13 @@ def station():
         f.read(size)  # ignoring the metadata
         checkeof = True
         ptime = 0
-        buffer = f.read(4)  # reading a frame header
-        while buffer != "":
-            data = buffer
+        while True:
+            tim = time.time() + 1
+            ptime = 0
+            data = bytes()
             while ptime < 1 and checkeof:  # 1 seconds target
+                buffer = f.read(4)  # reading a frame header
+                data += buffer
                 bitr, samplerate = dicfile.headtorate(buffer)  # getting the rates from the header
                 sampleamount = dicfile.sample[(buffer[1] & 0b1110) >> 1]  # checking the amount of samples in the frame
                 size = int((sampleamount / 8 * 1000 * bitr) / samplerate) + (
@@ -60,13 +79,14 @@ def station():
                 pos = f.tell()  # checking if we reached the end of file, for some reason python doesn't have a check for that, or peek function
                 checkeof = f.read(1) != ''  # so i read a character, check if it's empty, if it's not we continue the loop, otherwise we end it
                 f.seek(pos)  # and return to the space we were in the file before the check
-            if data != '' or skipFlag:
+            if data != '' and not skipFlag:
                 for con in connections:
                     con.send(data)
             else:
                 skipFlag = False
                 break
-            buffer = f.read(4)  # reading a frame header
+            while time.time() <= tim:
+                one = 1
 
 
 ############################################################################# main ###################################################################
@@ -96,21 +116,19 @@ while check:
         songList.append(answer)
         f.close()
         print("song added successfully")
-navi = threading.Thread(target=listening_thread())
+print("starting to listen")
+navi = threading.Thread(target=listening_thread)
 navi.setDaemon(True)
 navi.start()
-
-stationThread = threading.Thread(target=station())
+print("starting station")
+stationThread = threading.Thread(target=station)
 stationThread.setDaemon(True)
 stationThread.start()
 
-print("if you wanna skip enter skip, if you wanna end the program enter exit otherwise just listen")
+userThread = threading.Thread(target=user)
+userThread.setDaemon(True)
+userThread.start()
+
 while stationThread.is_alive():
-    inputCheck, useless1, useless2 = select.select([stdin], [], [], 1)
-    if inputCheck:
-        if answer.lower() == 'skip':
-            skipFlag = True
-        elif answer.lower() == 'exit':
-            break
-        else:
-            print("invalid input, if you wanna skip enter skip, if you wanna end the program enter exit otherwise just listen")
+    if exitFlag:
+        exit(0)
